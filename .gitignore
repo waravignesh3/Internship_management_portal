@@ -1,0 +1,9 @@
+node_modules
+dist
+build
+.env
+*.sqlite
+*.log
+dsa-engine/dsa_engine.exe
+dsa-engine/build
+.DS_Store
