@@ -12,7 +12,7 @@ export const InterviewPrepPage = () => {
   const [evaluation, setEvaluation] = useState(null);
 
   useEffect(() => {
-    api.post('/ai/interview', { companyName: 'Google', internshipTitle: 'C++ Systems Intern' })
+    api.post('/ai/interview', { companyName: 'Google', internshipTitle: 'Software Engineering Intern' })
       .then((res) => {
         if (res.data.success) setPrepData(res.data);
       })
@@ -26,7 +26,7 @@ export const InterviewPrepPage = () => {
     try {
       const res = await api.post('/ai/interview', {
         companyName: 'Google',
-        internshipTitle: 'C++ Systems Intern',
+        internshipTitle: 'Software Engineering Intern',
         userResponse: userAnswer
       });
       if (res.data.success) {
@@ -51,7 +51,7 @@ export const InterviewPrepPage = () => {
           <Video className="w-6 h-6 text-[var(--primary)]" /> AI Interview Prep & Mock Simulator
         </h1>
         <p className="text-xs text-[var(--text-muted)] mt-1">
-          Practice technical, DSA, and behavioral interview questions with real-time AI evaluation.
+          Practice technical, domain-specific, and behavioral interview questions with real-time AI evaluation.
         </p>
       </div>
 

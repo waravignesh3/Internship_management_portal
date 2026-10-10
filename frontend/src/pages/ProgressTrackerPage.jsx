@@ -101,7 +101,7 @@ export const ProgressTrackerPage = () => {
               rows={3}
               value={tasksCompleted}
               onChange={(e) => setTasksCompleted(e.target.value)}
-              placeholder="e.g. Created C++ matching benchmarks, updated database migrations..."
+              placeholder="e.g. Built frontend user interface, updated API integration and database migrations..."
               className="w-full p-3 text-xs rounded-xl border border-[var(--border-color)] bg-[var(--bg-main)] text-[var(--text-primary)]"
               required
             />

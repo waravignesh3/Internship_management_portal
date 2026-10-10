@@ -108,6 +108,35 @@ export const AuthProvider = ({ children }) => {
     addToast('Logged out successfully.', 'info');
   };
 
+  const refreshUser = async () => {
+    if (!token) return;
+    try {
+      const res = await api.get('/auth/me');
+      if (res.data.success) {
+        setUser(res.data.user);
+        localStorage.setItem('internhub_user', JSON.stringify(res.data.user));
+        return res.data.user;
+      }
+    } catch (err) {
+      console.warn('Failed to refresh user:', err);
+    }
+  };
+
+  const updateProfileState = (updatedProfile) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const nextUser = {
+        ...prev,
+        profile: {
+          ...prev.profile,
+          ...updatedProfile
+        }
+      };
+      localStorage.setItem('internhub_user', JSON.stringify(nextUser));
+      return nextUser;
+    });
+  };
+
   const setTheme = (newTheme) => setThemeState(newTheme);
   const setAccent = (newAccent) => setAccentState(newAccent);
 
@@ -129,7 +158,9 @@ export const AuthProvider = ({ children }) => {
         toasts,
         addToast,
         removeToast,
-        setUser
+        setUser,
+        refreshUser,
+        updateProfileState
       }}
     >
       {children}

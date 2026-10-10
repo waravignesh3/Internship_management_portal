@@ -1,10 +1,74 @@
 const aiService = require('../services/ai/aiService');
 const { query } = require('../config/db');
+const { calculateProfileCompletion } = require('../utils/profileCompletion');
+
+/**
+ * GET /api/ai/status
+ * Returns the real connection state of the AI provider.
+ * Never sends the API key to the client.
+ */
+async function aiStatus(req, res) {
+  try {
+    const configured = aiService.isConfigured();
+    if (!configured) {
+      return res.json({
+        configured: false,
+        connected: false,
+        provider: 'gemini',
+        status: 'configuration_missing',
+        message: 'AI_API_KEY is not configured in backend/.env.'
+      });
+    }
+
+    // Perform a lightweight real probe using a minimal prompt
+    try {
+      await aiService.callGeminiApi('Reply with exactly: ok', '', []);
+      return res.json({
+        configured: true,
+        connected: true,
+        provider: 'Google Gemini AI',
+        status: 'connected',
+        message: 'Gemini API connection verified successfully.'
+      });
+    } catch (probeErr) {
+      const msg = probeErr.message || '';
+      let status = 'provider_error';
+      let userMsg = 'Gemini API returned an error during connection probe.';
+
+      if (/401|403|authentication|api.?key|invalid/i.test(msg)) {
+        status = 'auth_failed';
+        userMsg = 'Gemini rejected the API key. The key may be invalid, expired, or restricted.';
+      } else if (/429|quota|rate.?limit/i.test(msg)) {
+        status = 'quota_exceeded';
+        userMsg = 'Gemini quota or rate limit exceeded for this API key.';
+      } else if (/404|not.?found|model/i.test(msg)) {
+        status = 'model_unavailable';
+        userMsg = 'The requested Gemini model is unavailable or unsupported.';
+      } else if (/network|ECONNREFUSED|ETIMEDOUT|fetch/i.test(msg)) {
+        status = 'provider_unavailable';
+        userMsg = 'Network failure or Gemini API is unreachable.';
+      }
+
+      return res.json({
+        configured: true,
+        connected: false,
+        provider: 'Google Gemini AI',
+        status,
+        message: userMsg
+      });
+    }
+  } catch (error) {
+    console.error('[AI Status] Unexpected error:', error.message);
+    return res.status(500).json({ configured: false, connected: false, status: 'error', message: 'AI status check failed.' });
+  }
+}
 
 async function chat(req, res) {
   try {
-    const { message } = req.body;
-    if (!message) return res.status(400).json({ success: false, error: 'Message content is required.' });
+    const { message, history } = req.body;
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ success: false, error: 'Message content is required.' });
+    }
 
     let studentContext = {};
     if (req.user) {
@@ -13,10 +77,19 @@ async function chat(req, res) {
         studentContext = s[0];
         const sks = await query('SELECT sk.name FROM student_skills ss JOIN skills sk ON ss.skill_id = sk.id WHERE ss.student_id = $1', [studentContext.id]);
         studentContext.skills = sks.map(k => k.name);
+
+        const projects = await query('SELECT * FROM projects WHERE student_id = $1', [studentContext.id]);
+        studentContext.projects = projects;
+
+        const totalApps = await query('SELECT COUNT(*) as cnt FROM applications WHERE student_id = $1', [studentContext.id]);
+        studentContext.totalApplications = parseInt(totalApps[0].cnt || totalApps[0].CNT || 0, 10);
+
+        studentContext.completionDetails = calculateProfileCompletion(studentContext, studentContext.skills, projects);
+        studentContext.profile_completion = studentContext.completionDetails.percentage;
       }
     }
 
-    const result = await aiService.chat(message, studentContext);
+    const result = await aiService.chat(message, studentContext, history || []);
     return res.json(result);
   } catch (error) {
     console.error('ai chat error:', error);
@@ -122,6 +195,7 @@ async function projectRecommendations(req, res) {
 }
 
 module.exports = {
+  aiStatus,
   chat,
   skillGap,
   resumeAssistant,

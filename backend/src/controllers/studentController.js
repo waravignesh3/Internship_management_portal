@@ -1,6 +1,7 @@
 const { query } = require('../config/db');
 const dsaService = require('../services/dsaService');
 const aiService = require('../services/ai/aiService');
+const { calculateProfileCompletion } = require('../utils/profileCompletion');
 
 async function getStudentDashboard(req, res) {
   try {
@@ -16,6 +17,17 @@ async function getStudentDashboard(req, res) {
       [student.id]
     );
     student.skills = skillsRes.map(s => s.name);
+
+    // Fetch projects
+    const projectsRes = await query('SELECT * FROM projects WHERE student_id = $1', [student.id]);
+    student.projects = projectsRes;
+
+    // Calculate real dynamic profile completion
+    const completionDetails = calculateProfileCompletion(student, student.skills, student.projects);
+    student.profile_completion = completionDetails.percentage;
+
+    // Keep DB synchronized with calculated percentage
+    await query('UPDATE students SET profile_completion = $1 WHERE id = $2', [completionDetails.percentage, student.id]);
 
     // Fetch stats
     const totalApps = await query('SELECT COUNT(*) as cnt FROM applications WHERE student_id = $1', [student.id]);
@@ -71,8 +83,9 @@ async function getStudentDashboard(req, res) {
         selected: selectedCount,
         savedInternships: parseInt(saved[0].cnt || saved[0].CNT || 0, 10),
         successRate,
-        profileCompletion: student.profile_completion || 85
+        profileCompletion: completionDetails.percentage
       },
+      completionDetails,
       student,
       upcomingInterviews: interviews,
       recentApplications: recentApps,
@@ -90,9 +103,55 @@ async function getStudentDashboard(req, res) {
   }
 }
 
+async function getStudentProfile(req, res) {
+  try {
+    const sRes = await query('SELECT * FROM students WHERE user_id = $1', [req.user.id]);
+    if (sRes.length === 0) {
+      return res.status(404).json({ success: false, error: 'Student profile not found.' });
+    }
+    const student = sRes[0];
+
+    const skillsRes = await query(
+      `SELECT sk.name FROM student_skills ss JOIN skills sk ON ss.skill_id = sk.id WHERE ss.student_id = $1`,
+      [student.id]
+    );
+    student.skills = skillsRes.map(s => s.name);
+
+    const projectsRes = await query('SELECT * FROM projects WHERE student_id = $1', [student.id]);
+    student.projects = projectsRes;
+
+    const completionDetails = calculateProfileCompletion(student, student.skills, student.projects);
+    student.profile_completion = completionDetails.percentage;
+
+    return res.json({
+      success: true,
+      student,
+      completionDetails
+    });
+  } catch (error) {
+    console.error('getStudentProfile error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to retrieve profile.' });
+  }
+}
+
 async function updateStudentProfile(req, res) {
   try {
-    const { full_name, phone, college_name, department, cgpa, graduation_year, preferred_domain, preferred_locations, preferred_work_mode, min_stipend, bio, resume_url, skills } = req.body;
+    const {
+      full_name,
+      phone,
+      college_name,
+      department,
+      cgpa,
+      graduation_year,
+      preferred_domain,
+      preferred_locations,
+      preferred_work_mode,
+      min_stipend,
+      bio,
+      resume_url,
+      avatar,
+      skills
+    } = req.body;
 
     const sRes = await query('SELECT id FROM students WHERE user_id = $1', [req.user.id]);
     if (sRes.length === 0) {
@@ -100,22 +159,11 @@ async function updateStudentProfile(req, res) {
     }
     const studentId = sRes[0].id;
 
-    let completion = 50;
-    if (bio) completion += 10;
-    if (resume_url) completion += 15;
-    if (cgpa) completion += 10;
-    if (skills && skills.length > 0) completion += 15;
-    completion = Math.min(100, completion);
-
-    await query(
-      `UPDATE students SET full_name = $1, phone = $2, college_name = $3, department = $4, cgpa = $5, graduation_year = $6, preferred_domain = $7, preferred_locations = $8, preferred_work_mode = $9, min_stipend = $10, bio = $11, resume_url = $12, profile_completion = $13, updated_at = CURRENT_TIMESTAMP WHERE id = $14`,
-      [full_name, phone, college_name, department, cgpa, graduation_year, preferred_domain, preferred_locations, preferred_work_mode, min_stipend, bio, resume_url, completion, studentId]
-    );
-
-    // Update skills
+    // Update skills first if provided
     if (Array.isArray(skills)) {
       await query('DELETE FROM student_skills WHERE student_id = $1', [studentId]);
       for (const skName of skills) {
+        if (!skName || !skName.trim()) continue;
         let skRes = await query('SELECT id FROM skills WHERE LOWER(name) = LOWER($1)', [skName.trim()]);
         let skillId;
         if (skRes.length === 0) {
@@ -128,11 +176,88 @@ async function updateStudentProfile(req, res) {
       }
     }
 
-    return res.json({ success: true, message: 'Profile updated successfully!', profileCompletion: completion });
+    // Fetch current profile skills and projects for accurate completion calculation
+    const skillsRes = await query(
+      `SELECT sk.name FROM student_skills ss JOIN skills sk ON ss.skill_id = sk.id WHERE ss.student_id = $1`,
+      [studentId]
+    );
+    const updatedSkills = skillsRes.map(s => s.name);
+
+    const projectsRes = await query('SELECT * FROM projects WHERE student_id = $1', [studentId]);
+
+    const tempStudentObj = {
+      full_name,
+      phone,
+      college_name,
+      department,
+      cgpa: cgpa ? parseFloat(cgpa) : null,
+      graduation_year: graduation_year ? parseInt(graduation_year, 10) : null,
+      preferred_domain,
+      preferred_locations,
+      preferred_work_mode,
+      min_stipend: min_stipend ? parseInt(min_stipend, 10) : 0,
+      bio,
+      resume_url,
+      avatar
+    };
+
+    const completionDetails = calculateProfileCompletion(tempStudentObj, updatedSkills, projectsRes);
+
+    await query(
+      `UPDATE students SET 
+        full_name = COALESCE($1, full_name), 
+        phone = COALESCE($2, phone), 
+        college_name = COALESCE($3, college_name), 
+        department = COALESCE($4, department), 
+        cgpa = COALESCE($5, cgpa), 
+        graduation_year = COALESCE($6, graduation_year), 
+        preferred_domain = COALESCE($7, preferred_domain), 
+        preferred_locations = COALESCE($8, preferred_locations), 
+        preferred_work_mode = COALESCE($9, preferred_work_mode), 
+        min_stipend = COALESCE($10, min_stipend), 
+        bio = COALESCE($11, bio), 
+        resume_url = COALESCE($12, resume_url), 
+        avatar = COALESCE($13, avatar), 
+        profile_completion = $14, 
+        updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $15`,
+      [
+        full_name || null,
+        phone || null,
+        college_name || null,
+        department || null,
+        cgpa ? parseFloat(cgpa) : null,
+        graduation_year ? parseInt(graduation_year, 10) : null,
+        preferred_domain || null,
+        preferred_locations || null,
+        preferred_work_mode || null,
+        min_stipend ? parseInt(min_stipend, 10) : 0,
+        bio || null,
+        resume_url || null,
+        avatar || null,
+        completionDetails.percentage,
+        studentId
+      ]
+    );
+
+    // Fetch refreshed complete student profile record
+    const refRes = await query('SELECT * FROM students WHERE id = $1', [studentId]);
+    const updatedStudent = refRes[0];
+    updatedStudent.skills = updatedSkills;
+    updatedStudent.projects = projectsRes;
+
+    return res.json({
+      success: true,
+      message: 'Profile updated successfully!',
+      profileCompletion: completionDetails.percentage,
+      completionDetails,
+      student: updatedStudent
+    });
   } catch (error) {
     console.error('updateStudentProfile error:', error);
     return res.status(500).json({ success: false, error: 'Failed to update profile.' });
   }
 }
 
-module.exports = { getStudentDashboard, updateStudentProfile };
+module.exports = { getStudentDashboard, getStudentProfile, updateStudentProfile };
+

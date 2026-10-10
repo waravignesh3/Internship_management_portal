@@ -22,7 +22,7 @@ export const CompanyInternshipsPage = () => {
   const [durationMonths, setDurationMonths] = useState('6');
   const [minCgpa, setMinCgpa] = useState('7.5');
   const [availableSeats, setAvailableSeats] = useState('5');
-  const [skillsInput, setSkillsInput] = useState('C++, DSA, SQL, System Design');
+  const [skillsInput, setSkillsInput] = useState('React, Node.js, SQL, System Design');
 
   const fetchInternships = () => {
     api.get('/companies/dashboard')
@@ -127,7 +127,7 @@ export const CompanyInternshipsPage = () => {
       {/* Modal for Creating Internship */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Publish New Internship">
         <form onSubmit={handleCreate} className="space-y-4">
-          <Input label="Internship Title" value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="C++ Systems Software Intern" />
+          <Input label="Internship Title" value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="Software Engineering Intern" />
           <div className="grid grid-cols-2 gap-3">
             <Input label="Domain" value={domain} onChange={(e) => setDomain(e.target.value)} required />
             <Select label="Work Mode" value={workMode} onChange={(e) => setWorkMode(e.target.value)} options={[

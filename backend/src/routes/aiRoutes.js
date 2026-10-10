@@ -1,7 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { chat, skillGap, resumeAssistant, careerAdvisor, interviewPrep, projectRecommendations } = require('../controllers/aiController');
+const { chat, skillGap, resumeAssistant, careerAdvisor, interviewPrep, projectRecommendations, aiStatus } = require('../controllers/aiController');
 const { authenticateToken } = require('../middleware/auth');
+
+// AI status check — no auth needed so the chatbot UI can check before login
+router.get('/status', aiStatus);
 
 router.post('/chat', authenticateToken, chat);
 router.post('/skill-gap', authenticateToken, skillGap);

@@ -24,10 +24,10 @@ export const AdminDSAEnginePage = () => {
       let res;
       if (endpoint === 'match') {
         res = await api.post('/dsa/match', {
-          studentProfile: { full_name: 'Aarav Sharma', cgpa: 9.15, skills: ['C++', 'DSA', 'SQL', 'React', 'Node.js'], preferred_domain: 'Software Engineering', preferred_work_mode: 'HYBRID' }
+          studentProfile: { full_name: 'Aarav Sharma', cgpa: 9.15, skills: ['React', 'Node.js', 'SQL', 'Python'], preferred_domain: 'Software Engineering', preferred_work_mode: 'HYBRID' }
         });
       } else if (endpoint === 'graph') {
-        res = await api.post('/dsa/graph', { skill: 'C++' });
+        res = await api.post('/dsa/graph', { skill: 'React' });
       } else if (endpoint === 'allocate') {
         res = await api.post('/dsa/allocate', { totalSeats: 3 });
       }
@@ -47,11 +47,11 @@ export const AdminDSAEnginePage = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-slate-900 text-white shadow-2xl border border-slate-800">
         <div>
           <Badge variant="purple" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 mb-2 uppercase font-bold text-[10px]">
-            <Cpu className="w-3.5 h-3.5 mr-1" /> College Viva & Technical Demonstration Page
+            <Cpu className="w-3.5 h-3.5 mr-1" /> System Administrator & Matching Engine Monitor
           </Badge>
-          <h1 className="text-2xl font-black">C++ Data Structures & Algorithms Engine</h1>
+          <h1 className="text-2xl font-black">Matching & Allocation Engine Inspector</h1>
           <p className="text-xs text-slate-300 mt-1 max-w-xl">
-            Live interactive inspector for custom C++ HashMaps, Skill Graph BFS/DFS, Max Heaps, and Greedy Seat Allocators.
+            Live inspector for candidate profile indexing, skill relationship mapping, and candidate seat allocation.
           </p>
         </div>
       </div>
@@ -59,17 +59,17 @@ export const AdminDSAEnginePage = () => {
       {/* Interactive Test Trigger Buttons */}
       <Card className="p-6 space-y-4">
         <h3 className="text-sm font-bold flex items-center gap-2">
-          <Play className="w-4 h-4 text-emerald-500 fill-current" /> Live Algorithm Execution Test Bench
+          <Play className="w-4 h-4 text-emerald-500 fill-current" /> Live Matching Engine Test Bench
         </h3>
         <div className="flex flex-wrap gap-3">
           <Button onClick={() => handleTestRun('match')} loading={running} className="bg-blue-600 hover:bg-blue-700">
-            Run 6-Factor Matching (Max Heap + HashMap)
+            Run Multi-Factor Candidate Matching
           </Button>
           <Button onClick={() => handleTestRun('graph')} loading={running} className="bg-purple-600 hover:bg-purple-700">
-            Run Skill Graph (BFS & DFS Traversal)
+            Run Skill Relationship Mapping
           </Button>
           <Button onClick={() => handleTestRun('allocate')} loading={running} className="bg-emerald-600 hover:bg-emerald-700">
-            Run Greedy Seat Allocation
+            Run Candidate Seat Allocation
           </Button>
         </div>
       </Card>
@@ -79,9 +79,9 @@ export const AdminDSAEnginePage = () => {
         <Card className="p-6 bg-slate-900 text-slate-100 border-slate-800 space-y-4 shadow-2xl animate-in zoom-in-95">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <h4 className="text-xs font-mono font-bold text-emerald-400 flex items-center gap-2">
-              <Code2 className="w-4 h-4" /> Algorithm Output JSON
+              <Code2 className="w-4 h-4" /> Engine Output JSON
             </h4>
-            <Badge variant="primary" className="font-mono text-[10px]">{testResult.algorithm}</Badge>
+            <Badge variant="primary" className="font-mono text-[10px]">{testResult.algorithm || 'Matching Engine'}</Badge>
           </div>
           <pre className="text-xs font-mono text-slate-300 bg-slate-950 p-4 rounded-xl overflow-x-auto max-h-96">
             {JSON.stringify(testResult, null, 2)}
@@ -89,36 +89,36 @@ export const AdminDSAEnginePage = () => {
         </Card>
       )}
 
-      {/* Algorithms Specification Matrix */}
+      {/* Infrastructure Specification Matrix */}
       <div className="space-y-4">
-        <h3 className="text-sm font-bold text-[var(--text-muted)] uppercase tracking-wider">Implemented C++ Algorithms Matrix</h3>
+        <h3 className="text-sm font-bold text-[var(--text-muted)] uppercase tracking-wider">System Component Architecture</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card className="p-5 space-y-2">
-            <Badge variant="primary">HASH MAP</Badge>
-            <h4 className="font-bold text-sm">O(1) Custom HashMap Table</h4>
-            <p className="text-xs text-[var(--text-secondary)]">Used for instant O(1) average lookup of Student IDs, Skill IDs, Company IDs, and Internship specifications.</p>
-            <p className="text-[10px] font-mono text-[var(--text-muted)]">Time: O(1) Avg | Space: O(N)</p>
+            <Badge variant="primary">PROFILE INDEXING</Badge>
+            <h4 className="font-bold text-sm">Candidate & Profile Indexing</h4>
+            <p className="text-xs text-[var(--text-secondary)]">Provides instant lookup of student profiles, company requisitions, and skill requirements.</p>
+            <p className="text-[10px] font-semibold text-[var(--text-muted)]">Status: Operational</p>
           </Card>
 
           <Card className="p-5 space-y-2">
-            <Badge variant="purple">SKILL GRAPH</Badge>
-            <h4 className="font-bold text-sm">Adjacency List Graph (BFS / DFS)</h4>
-            <p className="text-xs text-[var(--text-secondary)]">BFS finds related skill clusters within 2 hops; DFS constructs learning roadmaps and prerequisite trees.</p>
-            <p className="text-[10px] font-mono text-[var(--text-muted)]">Time: O(V + E) | Space: O(V)</p>
+            <Badge variant="purple">SKILL NETWORK</Badge>
+            <h4 className="font-bold text-sm">Skill Relationship Network</h4>
+            <p className="text-xs text-[var(--text-secondary)]">Maps related skills and constructs candidate skill prerequisite roadmaps.</p>
+            <p className="text-[10px] font-semibold text-[var(--text-muted)]">Status: Operational</p>
           </Card>
 
           <Card className="p-5 space-y-2">
-            <Badge variant="success">PRIORITY QUEUE</Badge>
-            <h4 className="font-bold text-sm">Max Binary Heap Ranking</h4>
-            <p className="text-xs text-[var(--text-secondary)]">Ranks student candidate applications dynamically using logarithmic heapifyUp and heapifyDown operations.</p>
-            <p className="text-[10px] font-mono text-[var(--text-muted)]">Time: O(N log N) | Space: O(N)</p>
+            <Badge variant="success">MATCH RANKING</Badge>
+            <h4 className="font-bold text-sm">Candidate Match Ranking</h4>
+            <p className="text-xs text-[var(--text-secondary)]">Ranks student candidate applications based on skill alignment, CGPA, and preferences.</p>
+            <p className="text-[10px] font-semibold text-[var(--text-muted)]">Status: Operational</p>
           </Card>
 
           <Card className="p-5 space-y-2">
             <Badge variant="warning">SEAT ALLOCATION</Badge>
-            <h4 className="font-bold text-sm">Greedy Seat Allocator</h4>
-            <p className="text-xs text-[var(--text-secondary)]">Evaluates CGPA eligibility thresholds, ranks qualified applicants, and allocates available seats without over-allocation.</p>
-            <p className="text-[10px] font-mono text-[var(--text-muted)]">Time: O(K log K) | Space: O(K)</p>
+            <h4 className="font-bold text-sm">Automated Seat Allocator</h4>
+            <p className="text-xs text-[var(--text-secondary)]">Evaluates CGPA eligibility thresholds and shortlists candidates for available internship openings.</p>
+            <p className="text-[10px] font-semibold text-[var(--text-muted)]">Status: Operational</p>
           </Card>
         </div>
       </div>

@@ -27,21 +27,17 @@ export const RecommendationsPage = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-gradient-to-r from-purple-700 via-[var(--primary)] to-indigo-700 text-white shadow-xl">
         <div>
           <Badge variant="purple" className="bg-white/20 text-white border-white/30 mb-2 uppercase font-bold text-[10px]">
-            <Cpu className="w-3.5 h-3.5 mr-1" /> Real C++ DSA Engine Active
+            <Sparkles className="w-3.5 h-3.5 mr-1" /> Smart Opportunity Recommendations
           </Badge>
-          <h1 className="text-2xl font-black">AI & DSA Recommended Internships</h1>
+          <h1 className="text-2xl font-black">Internships Picked for You</h1>
           <p className="text-xs text-white/80 mt-1 max-w-xl">
-            Ranked using Priority Queues (Max Heap), O(1) Custom HashMap Indexing, and 6-factor weight calculations.
+            Explore relevant opportunities based on your skills, interests, qualifications, and career preferences.
           </p>
         </div>
 
-        {dsaMeta && (
-          <div className="p-3 rounded-xl bg-white/10 backdrop-blur-xs text-xs font-mono text-left border border-white/20 space-y-1">
-            <p>Algorithm: {dsaMeta.algorithm}</p>
-            <p>Complexity: {dsaMeta.timeComplexity}</p>
-            <p>Time: {dsaMeta.executionTimeMs?.toFixed(2)}ms</p>
-          </div>
-        )}
+        <div className="p-3 rounded-xl bg-white/10 backdrop-blur-xs text-xs font-semibold text-left border border-white/20 space-y-1">
+          <p>Personalized Candidate Matches</p>
+        </div>
       </div>
 
       {/* Profile Overview Pill */}
@@ -72,7 +68,7 @@ export const RecommendationsPage = () => {
               <div className="flex items-center gap-3">
                 <div className="flex flex-col items-end">
                   <span className="text-3xl font-black text-[var(--primary)]">{item.matchScore}%</span>
-                  <span className="text-[9px] uppercase font-bold text-[var(--text-muted)]">DSA Match Index</span>
+                  <span className="text-[9px] uppercase font-bold text-[var(--text-muted)]">Match Index</span>
                 </div>
                 <Badge variant={item.isEligible ? 'success' : 'danger'}>
                   {item.isEligible ? 'CGPA Eligible' : 'Ineligible'}

@@ -102,7 +102,7 @@ export const InternshipExplorer = () => {
         >
           <div className="md:col-span-2 relative">
             <Input
-              placeholder="Search title, company, skill (e.g. C++, DSA, Node.js)..."
+              placeholder="Search title, company, skill (e.g. React, Python, Node.js)..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />

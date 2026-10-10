@@ -87,10 +87,10 @@ export const CompanyApplicantsPage = () => {
           <h1 className="text-2xl font-black flex items-center gap-2">
             <Users className="w-6 h-6 text-[var(--primary)]" /> Candidate Applicant Portal
           </h1>
-          <p className="text-xs text-[var(--text-muted)] mt-1">Review candidates ranked by C++ Match Scores and run Greedy Seat Allocation.</p>
+          <p className="text-xs text-[var(--text-muted)] mt-1">Review candidate applications, evaluate match scores, and manage applicant selections.</p>
         </div>
         <Button onClick={handleRunSeatAllocation} loading={allocating} className="bg-purple-600 hover:bg-purple-700 text-white font-bold">
-          <Cpu className="w-4 h-4 mr-1" /> Run Greedy Seat Allocation
+          <Sparkles className="w-4 h-4 mr-1" /> Auto-Allocate Seats
         </Button>
       </div>
 
@@ -99,9 +99,9 @@ export const CompanyApplicantsPage = () => {
         <Card className="p-6 bg-purple-950/20 border-purple-500/40 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-purple-400 flex items-center gap-2">
-              <Sparkles className="w-4 h-4" /> C++ Greedy Seat Allocation Output
+              <Sparkles className="w-4 h-4" /> Candidate Seat Allocation Output
             </h3>
-            <span className="text-xs font-mono text-purple-300">{allocationResult.algorithm} ({allocationResult.timeComplexity})</span>
+            <span className="text-xs font-semibold text-purple-300">Automated Shortlist Status</span>
           </div>
           <div className="space-y-1.5 text-xs">
             {allocationResult.allocations?.map((alloc) => (
@@ -142,7 +142,7 @@ export const CompanyApplicantsPage = () => {
             <div className="flex flex-col items-end gap-3 shrink-0">
               <div className="text-right">
                 <span className="text-2xl font-black text-[var(--primary)]">{app.match_score}%</span>
-                <p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">C++ Match Score</p>
+                <p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Candidate Match Score</p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">

@@ -39,7 +39,7 @@ export const ApplicationsPage = () => {
       ) : applications.length === 0 ? (
         <EmptyState
           title="No Applications Found"
-          description="Explore our DSA-recommended internships and submit your first application!"
+          description="Explore recommended internships and submit your first application!"
         />
       ) : (
         <div className="space-y-6">

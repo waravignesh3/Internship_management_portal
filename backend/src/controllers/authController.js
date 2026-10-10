@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { query } = require('../config/db');
 const { JWT_SECRET } = require('../middleware/auth');
+const { calculateProfileCompletion } = require('../utils/profileCompletion');
 
 async function register(req, res) {
   try {
@@ -27,18 +28,26 @@ async function register(req, res) {
     );
     const userId = userRes[0].id;
 
+    let profileData = {};
     if (role.toUpperCase() === 'STUDENT') {
-      await query(
+      const sInsert = await query(
         `INSERT INTO students (user_id, full_name, college_name, department, cgpa, profile_completion)
-         VALUES ($1, $2, $3, $4, $5, 60)`,
-        [userId, fullName || 'New Student', collegeName || 'University', department || 'Computer Science', cgpa || 7.5]
+         VALUES ($1, $2, $3, $4, $5, 25) RETURNING id`,
+        [userId, fullName || 'New Student', collegeName || 'University', department || 'Computer Science', cgpa ? parseFloat(cgpa) : 7.5]
       );
+      const studentId = sInsert[0].id;
+      const s = await query('SELECT * FROM students WHERE id = $1', [studentId]);
+      profileData = s[0];
+      const completionDetails = calculateProfileCompletion(profileData, [], []);
+      profileData.profile_completion = completionDetails.percentage;
+      profileData.completionDetails = completionDetails;
     } else if (role.toUpperCase() === 'COMPANY') {
-      await query(
+      const c = await query(
         `INSERT INTO companies (user_id, company_name, is_verified)
-         VALUES ($1, $2, 1)`,
+         VALUES ($1, $2, 1) RETURNING *`,
         [userId, companyName || 'New Enterprise']
       );
+      profileData = c[0];
     }
 
     const token = jwt.sign({ id: userId, email, role: role.toUpperCase() }, JWT_SECRET, { expiresIn: '7d' });
@@ -46,7 +55,7 @@ async function register(req, res) {
     return res.status(201).json({
       success: true,
       token,
-      user: { id: userId, email, role: role.toUpperCase() }
+      user: { id: userId, email, role: role.toUpperCase(), profile: profileData }
     });
   } catch (error) {
     console.error('Register error:', error);
@@ -80,7 +89,24 @@ async function login(req, res) {
     let profileData = {};
     if (user.role === 'STUDENT') {
       const s = await query('SELECT * FROM students WHERE user_id = $1', [user.id]);
-      if (s.length > 0) profileData = s[0];
+      if (s.length > 0) {
+        profileData = s[0];
+        const sks = await query(
+          `SELECT sk.id, sk.name, sk.category, ss.proficiency_level 
+           FROM student_skills ss 
+           JOIN skills sk ON ss.skill_id = sk.id 
+           WHERE ss.student_id = $1`,
+          [profileData.id]
+        );
+        profileData.skills = sks;
+        const projects = await query('SELECT * FROM projects WHERE student_id = $1', [profileData.id]);
+        profileData.projects = projects;
+
+        const skillNames = sks.map(k => k.name);
+        const completionDetails = calculateProfileCompletion(profileData, skillNames, projects);
+        profileData.profile_completion = completionDetails.percentage;
+        profileData.completionDetails = completionDetails;
+      }
     } else if (user.role === 'COMPANY') {
       const c = await query('SELECT * FROM companies WHERE user_id = $1', [user.id]);
       if (c.length > 0) profileData = c[0];
@@ -133,6 +159,13 @@ async function getMe(req, res) {
           [profileData.id]
         );
         profileData.skills = sks;
+        const projects = await query('SELECT * FROM projects WHERE student_id = $1', [profileData.id]);
+        profileData.projects = projects;
+
+        const skillNames = sks.map(k => k.name);
+        const completionDetails = calculateProfileCompletion(profileData, skillNames, projects);
+        profileData.profile_completion = completionDetails.percentage;
+        profileData.completionDetails = completionDetails;
       }
     } else if (user.role === 'COMPANY') {
       const c = await query('SELECT * FROM companies WHERE user_id = $1', [user.id]);
@@ -153,3 +186,4 @@ async function getMe(req, res) {
 }
 
 module.exports = { register, login, getMe };
+

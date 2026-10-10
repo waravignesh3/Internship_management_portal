@@ -63,7 +63,7 @@ export const StudentDashboard = () => {
         <div className="flex items-center gap-3">
           <Link to="/recommendations">
             <Button variant="secondary" size="sm" className="bg-white text-[var(--primary)] hover:bg-slate-100 font-bold shadow-md">
-              <Sparkles className="w-4 h-4 fill-current" /> DSA Recommendations
+              <Sparkles className="w-4 h-4 fill-current" /> View Recommendations
             </Button>
           </Link>
         </div>
@@ -77,22 +77,20 @@ export const StudentDashboard = () => {
         <StatCard title="Saved Internships" value={stats?.savedInternships || 0} icon={Bookmark} />
       </div>
 
-      {/* Top DSA Recommendations Section */}
+      {/* Top Recommended Opportunities Section */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold flex items-center gap-2">
-              <Cpu className="w-5 h-5 text-[var(--primary)]" /> Recommended For You (C++ DSA Matched)
+              <Sparkles className="w-5 h-5 text-[var(--primary)]" /> Recommended For You
             </h2>
             <p className="text-xs text-[var(--text-muted)]">
-              Powered by C++ Priority Queue (Max Heap) & Custom HashMap
+              Personalized opportunities based on your skills, preferences, and qualifications
             </p>
           </div>
-          {dsaMeta && (
-            <Badge variant="purple" className="text-[10px] font-mono">
-              Engine: {dsaMeta.algorithm} ({dsaMeta.executionTimeMs?.toFixed(2)}ms)
-            </Badge>
-          )}
+          <Badge variant="purple" className="text-[10px] font-semibold">
+            Tailored Opportunities
+          </Badge>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

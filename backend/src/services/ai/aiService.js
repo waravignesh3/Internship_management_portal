@@ -1,78 +1,168 @@
 const axios = require('axios');
-const dsaService = require('../dsaService');
 
 class AIService {
-  constructor() {
-    this.provider = process.env.AI_PROVIDER || 'gemini';
-    this.apiKey = process.env.AI_API_KEY || '';
+  getApiKey() {
+    return (process.env.AI_API_KEY || '').trim();
+  }
+
+  getProvider() {
+    return (process.env.AI_PROVIDER || 'gemini').toLowerCase();
   }
 
   isConfigured() {
-    return Boolean(this.apiKey && this.apiKey.trim().length > 5);
+    const key = this.getApiKey();
+    return Boolean(key && key.length > 5);
   }
 
-  async callGeminiApi(prompt, systemInstruction = '') {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.apiKey}`;
-    const payload = {
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: `${systemInstruction ? systemInstruction + '\n\n' : ''}${prompt}` }]
-        }
-      ]
-    };
+  /**
+   * Primary Gemini API call supporting system instructions, multi-turn chat history,
+   * model fallback, and clean error handling.
+   */
+  async callGeminiApi(prompt, systemInstruction = '', history = []) {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('AI_API_KEY is missing in backend configuration.');
+    }
 
-    const response = await axios.post(url, payload, { headers: { 'Content-Type': 'application/json' }, timeout: 12000 });
-    const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    return text || 'No response from AI model.';
-  }
+    const contents = [];
 
-  // 1. AI Chatbot
-  async chat(userMessage, studentContext = {}) {
-    if (this.isConfigured()) {
-      try {
-        const sysMsg = `You are InternHub AI, an intelligent, encouraging career advisor and internship coach. 
-Student Context:
-- Name: ${studentContext.full_name || 'Student'}
-- CGPA: ${studentContext.cgpa || 'N/A'}
-- Preferred Domain: ${studentContext.preferred_domain || 'Software Engineering'}
-- Skills: ${Array.isArray(studentContext.skills) ? studentContext.skills.join(', ') : 'C++, DSA, React, SQL'}
-Provide concise, highly relevant advice based strictly on authorized student context. Do not reveal private user keys.`;
+    // Process multi-turn chat history
+    if (Array.isArray(history) && history.length > 0) {
+      for (const msg of history) {
+        if (!msg) continue;
+        const text = msg.text || msg.content || '';
+        if (!text.trim()) continue;
 
-        const text = await this.callGeminiApi(userMessage, sysMsg);
-        return { success: true, provider: this.provider, isFallback: false, response: text };
-      } catch (err) {
-        console.warn('[AI Service] Gemini call failed, falling back to rule-based assistant:', err.message);
+        const role = (msg.sender === 'USER' || msg.role === 'user') ? 'user' : 'model';
+        contents.push({
+          role,
+          parts: [{ text: text.trim() }]
+        });
       }
     }
 
-    // Rule-based fallback response
-    let responseText = "Hello! I am your InternHub AI assistant. Currently running in DSA rule-based fallback mode.\n\n";
-    const lower = userMessage.toLowerCase();
-
-    if (lower.includes('internship') || lower.includes('suit') || lower.includes('eligible')) {
-      responseText += `Based on your profile skills (${studentContext.skills ? studentContext.skills.join(', ') : 'C++, DSA, SQL'}), you are well-matched for Software Engineering, Backend, and C++ Systems Developer roles! Check out our DSA Engine Recommendations page for high match scores.`;
-    } else if (lower.includes('skill') || lower.includes('learn') || lower.includes('gap')) {
-      responseText += `To improve your internship readiness, we recommend focusing on Docker, System Design, Microservices, and Cloud Infrastructure (AWS) alongside your core C++ and DSA foundation.`;
-    } else if (lower.includes('interview') || lower.includes('prepare')) {
-      responseText += `Key topics to prepare:\n1. Data Structures: Graphs (BFS/DFS), Heaps/Priority Queues, Hash Maps.\n2. System Design: Caching, Database Indexing, Load Balancing.\n3. Behavioral: STAR method responses.`;
-    } else if (lower.includes('resume') || lower.includes('project')) {
-      responseText += `Try building a High-Throughput C++ Matching Engine or a Distributed Task Queue to showcase system programming skills on your resume.`;
-    } else {
-      responseText += `I can help you analyze your skill gap, recommend internships, tailor your resume, or prepare for technical interviews. What would you like to work on today?`;
+    // Append current prompt if not already the latest item in contents
+    if (prompt && prompt.trim()) {
+      const last = contents[contents.length - 1];
+      if (!last || last.role !== 'user' || last.parts[0].text !== prompt.trim()) {
+        contents.push({
+          role: 'user',
+          parts: [{ text: prompt.trim() }]
+        });
+      }
     }
 
+    if (contents.length === 0) {
+      throw new Error('No user message provided for AI generation.');
+    }
+
+    const payload = {
+      contents,
+      ...(systemInstruction ? {
+        systemInstruction: {
+          parts: [{ text: systemInstruction }]
+        }
+      } : {}),
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 1024
+      }
+    };
+
+    const modelsToTry = [
+      process.env.GEMINI_MODEL,   // Allow override via env var
+      'gemini-3.8-flash',          // Recommended for new API keys (Google's latest)
+      'gemini-3.7-flash',
+      'gemini-3.6-flash',
+      'gemini-flash-latest',
+      'gemini-pro-latest'
+    ].filter(Boolean);
+
+    let lastError = null;
+
+    for (const model of modelsToTry) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const response = await axios.post(url, payload, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 15000
+        });
+
+        const candidates = response.data?.candidates;
+        if (candidates && candidates.length > 0) {
+          const textPart = candidates[0]?.content?.parts?.[0]?.text;
+          if (textPart) return textPart;
+        }
+      } catch (err) {
+        lastError = err;
+        const status = err.response?.status;
+        const apiErrMsg = err.response?.data?.error?.message || err.message;
+        console.warn(`[AI Service] Gemini model ${model} returned error (${status}): ${apiErrMsg}`);
+
+        // If auth failure, don't keep testing other models
+        if (status === 401 || status === 403) {
+          throw new Error(`Gemini Authentication Error (${status}): ${apiErrMsg}`);
+        }
+      }
+    }
+
+    throw lastError || new Error('Failed to get response from Gemini API.');
+  }
+
+  // 1. Multi-turn AI Chatbot
+  async chat(userMessage, studentContext = {}, history = []) {
+    if (this.isConfigured()) {
+      try {
+        const completionInfo = studentContext.completionDetails || {};
+        const missingSectionsList = Array.isArray(completionInfo.sections)
+          ? completionInfo.sections.filter(s => !s.isComplete).map(s => s.title).join(', ')
+          : 'None';
+
+        const sysInstruction = `You are InternHub AI, the conversational career assistant for an Internship Management Portal. Help students discover internships, understand job descriptions, improve resumes, prepare for interviews, identify skill gaps, and create career-development plans. Provide natural, detailed, helpful answers and ask clarifying questions when needed. Use actual authorized application data when available. Never invent internship vacancies, application statuses, recruiter details, or student profile information. If a question requires current application data, obtain it from the authenticated backend rather than guessing. Never expose another user's private information. Do not claim to have changed a profile or submitted an application unless the relevant backend operation confirms success. Answer general questions helpfully while prioritizing internships, career growth, and professional development.
+
+Authenticated Student Profile Context:
+- Full Name: ${studentContext.full_name || 'Student'}
+- College & Department: ${studentContext.college_name || 'N/A'} (${studentContext.department || 'N/A'})
+- CGPA: ${studentContext.cgpa || 'N/A'}
+- Preferred Domain: ${studentContext.preferred_domain || 'Software Engineering'}
+- Preferred Locations: ${studentContext.preferred_locations || 'Remote / Hybrid'}
+- Skills: ${Array.isArray(studentContext.skills) ? studentContext.skills.join(', ') : 'Not set'}
+- Profile Completion: ${studentContext.profile_completion || 0}%
+- Missing Profile Sections: ${missingSectionsList || 'Profile is complete'}
+- Bio: ${studentContext.bio || 'Not provided'}
+- Applications Sent: ${studentContext.totalApplications || 0}`;
+
+        const aiResponseText = await this.callGeminiApi(userMessage, sysInstruction, history);
+        return {
+          success: true,
+          provider: 'Google Gemini AI',
+          isFallback: false,
+          response: aiResponseText
+        };
+      } catch (err) {
+        console.warn('[AI Service] Gemini call failed:', err.message);
+        return {
+          success: false,
+          provider: 'Google Gemini AI',
+          isFallback: true,
+          error: err.message,
+          response: `Notice: Gemini API request failed (${err.message}). Please ensure a valid AI_API_KEY is configured in backend environment variables.`
+        };
+      }
+    }
+
+    // Fallback response when AI_API_KEY is not set
     return {
       success: true,
-      provider: 'DSA Rule-Based Fallback',
+      provider: 'InternHub Career Assistant (Setup Required)',
       isFallback: true,
-      response: responseText
+      response: `InternHub AI is ready to connect! To activate real conversational Gemini answers, please configure a valid AI_API_KEY in backend/.env.\n\nIn the meantime, make sure to complete your profile, list your skills, and explore internship opportunities on the portal!`
     };
   }
 
-  // 2. AI Skill Gap Analyzer
+  // 2. Skill Gap Analyzer
   async analyzeSkillGap(studentSkills = [], targetRoleOrInternship = {}) {
-    const requiredSkills = targetRoleOrInternship.requiredSkills || ['C++', 'DSA', 'System Design', 'Docker', 'PostgreSQL'];
+    const requiredSkills = targetRoleOrInternship.requiredSkills || ['React', 'Node.js', 'PostgreSQL', 'System Design', 'Docker'];
     const studentSkillSet = new Set(studentSkills.map(s => s.toLowerCase()));
 
     const possessed = [];
@@ -89,13 +179,13 @@ Provide concise, highly relevant advice based strictly on authorized student con
     if (this.isConfigured()) {
       try {
         const prompt = `Perform a detailed skill-gap analysis for a student targeting '${targetRoleOrInternship.title || 'Backend Engineer'}'. 
-Possessed Skills: ${possessed.join(', ')}
-Missing Skills: ${missing.join(', ')}
-Return a structured JSON with key learning suggestions.`;
+Possessed Skills: ${possessed.join(', ') || 'None'}
+Missing Skills: ${missing.join(', ') || 'None'}
+Provide actionable learning steps and resources.`;
         const aiText = await this.callGeminiApi(prompt);
         return { success: true, isFallback: false, possessed, missing, aiAnalysis: aiText };
       } catch (err) {
-        console.warn('[AI Service] Skill gap AI call fallback:', err.message);
+        console.warn('[AI Service] Skill gap AI call failed:', err.message);
       }
     }
 
@@ -105,97 +195,122 @@ Return a structured JSON with key learning suggestions.`;
       possessed,
       missing,
       suggestions: [
-        { skill: missing[0] || 'Docker', priority: 'HIGH', learningOrder: 1, reason: 'Crucial containerization skill demanded by top companies.' },
-        { skill: missing[1] || 'System Design', priority: 'MEDIUM', learningOrder: 2, reason: 'Essential for technical interview rounds and architecture design.' },
-        { skill: missing[2] || 'AWS', priority: 'LOW', learningOrder: 3, reason: 'Good cloud experience for enterprise production deployments.' }
+        { skill: missing[0] || 'Docker', priority: 'HIGH', learningOrder: 1, reason: 'Crucial containerization skill demanded by top tech companies.' },
+        { skill: missing[1] || 'System Design', priority: 'MEDIUM', learningOrder: 2, reason: 'Essential for technical interview rounds and scalable backend design.' },
+        { skill: missing[2] || 'Cloud Services', priority: 'LOW', learningOrder: 3, reason: 'Good experience for production deployments.' }
       ]
     };
   }
 
-  // 3. AI Resume Assistant
+  // 3. Resume Assistant
   async improveResume(studentProfile, targetInternship) {
     if (this.isConfigured()) {
       try {
-        const prompt = `Tailor the following student resume bullet points for the target internship '${targetInternship.title}' requiring [${targetInternship.requiredSkills?.join(', ')}].
-Current Profile Summary: ${studentProfile.bio}
-Return tailored summary and bullet points.`;
+        const prompt = `Tailor the following student resume summary and project bullet points for target internship '${targetInternship.title}' requiring [${targetInternship.requiredSkills?.join(', ')}].
+Current Profile Summary: ${studentProfile.bio || 'Computer Science student'}
+Current Skills: ${Array.isArray(studentProfile.skills) ? studentProfile.skills.join(', ') : 'Software Development'}
+Provide a polished professional summary and 3 impactful bullet points.`;
         const text = await this.callGeminiApi(prompt);
         return { success: true, isFallback: false, tailoredResume: text };
       } catch (err) {
-        console.warn('[AI Service] Resume AI call fallback:', err.message);
+        console.warn('[AI Service] Resume AI call failed:', err.message);
       }
     }
 
     return {
       success: true,
       isFallback: true,
-      tailoredSummary: `Engineered high-performance software systems utilizing ${studentProfile.skills?.slice(0, 3).join(', ')}. Demonstrated strong problem-solving capabilities in C++ Data Structures and Algorithms with a CGPA of ${studentProfile.cgpa}.`,
+      tailoredSummary: `Enthusiastic software engineering student skilled in ${Array.isArray(studentProfile.skills) ? studentProfile.skills.slice(0, 3).join(', ') : 'full-stack development'}. Demonstrates strong problem-solving capabilities with a CGPA of ${studentProfile.cgpa || '8.5'}.`,
       improvedProjects: [
-        `Architected a DSA-driven matching algorithm utilizing Priority Queues (Max Heap) and Custom Hash Maps, optimizing candidate ranking time complexity to O(N log N).`,
-        `Integrated PostgreSQL database schemas with full relational normalization, primary/foreign keys, and indexed queries for sub-50ms execution.`
+        `Architected full-stack web application with responsive UI, real-time API integrations, and robust database indexing.`,
+        `Optimized API performance and endpoint query handling, reducing response latency for data-heavy dashboard endpoints.`
       ],
-      suggestedKeywords: targetInternship?.requiredSkills || ['C++', 'DSA', 'SQL', 'System Design', 'Docker']
+      suggestedKeywords: targetInternship?.requiredSkills || ['React', 'Node.js', 'SQL', 'REST API', 'System Design']
     };
   }
 
-  // 4. AI Career Advisor
+  // 4. Career Advisor
   async getCareerAdvice(studentProfile, targetCareer = 'Software Engineer') {
+    if (this.isConfigured()) {
+      try {
+        const prompt = `Provide a structured 3-phase career roadmap for a student aiming to become a '${targetCareer}'. Current skills: ${Array.isArray(studentProfile.skills) ? studentProfile.skills.join(', ') : 'Programming'}.`;
+        const aiText = await this.callGeminiApi(prompt);
+        return { success: true, isFallback: false, targetCareer, aiRoadmap: aiText };
+      } catch (err) {
+        console.warn('[AI Service] Career advice AI call failed:', err.message);
+      }
+    }
+
     return {
       success: true,
+      isFallback: true,
       targetCareer,
-      currentSkills: studentProfile.skills || ['C++', 'DSA', 'SQL'],
+      currentSkills: studentProfile.skills || ['React', 'Node.js', 'SQL'],
       roadmap: [
-        { phase: 'Phase 1: Foundations', target: 'Master C++17, Memory Management, and Core DSA (Graph, Heap, Sorting).' },
-        { phase: 'Phase 2: Full Stack Integration', target: 'Build Node.js REST APIs connected to PostgreSQL databases.' },
-        { phase: 'Phase 3: DevOps & Scale', target: 'Deploy containers with Docker and master System Design principles.' }
+        { phase: 'Phase 1: Core Foundations', target: 'Master Data Structures, Algorithms, and Modern Web Application Architecture.' },
+        { phase: 'Phase 2: Full-Stack Mastery', target: 'Build production-grade REST APIs and database schema migrations.' },
+        { phase: 'Phase 3: Production & DevOps', target: 'Containerize with Docker, learn cloud deployment, and practice system design interviews.' }
       ]
     };
   }
 
-  // 5. AI Interview Prep
+  // 5. Interview Prep
   async generateInterviewPrep(companyName, internshipTitle, userResponse = '') {
+    if (this.isConfigured()) {
+      try {
+        const prompt = userResponse
+          ? `Evaluate the student's technical answer for '${internshipTitle}' at '${companyName}': "${userResponse}". Provide constructive feedback, score out of 100, strengths, and improvements.`
+          : `Generate 3 realistic interview questions (Technical, System Design, Behavioral) for '${internshipTitle}' at '${companyName}' with guidance for great answers.`;
+        const aiText = await this.callGeminiApi(prompt);
+        return { success: true, isFallback: false, companyName, internshipTitle, aiContent: aiText };
+      } catch (err) {
+        console.warn('[AI Service] Interview prep AI call failed:', err.message);
+      }
+    }
+
     const defaultQuestions = [
-      { id: 1, type: 'DSA', question: 'How would you implement a Priority Queue from scratch in C++ to rank candidate applications?', guidance: 'Focus on binary max heaps, heapifyUp, and heapifyDown O(log N) operations.' },
-      { id: 2, type: 'TECHNICAL', question: 'Explain how database indexing in PostgreSQL improves query performance from O(N) to O(log N).', guidance: 'Discuss B-Tree data structures, index scans, and maintenance trade-offs.' },
-      { id: 3, type: 'BEHAVIORAL', question: 'Describe a challenging bug you encountered in a C++ or web project and how you debugged it.', guidance: 'Use the STAR method: Situation, Task, Action, Result.' }
+      { id: 1, type: 'TECHNICAL', question: 'How do you optimize state management and re-renders in a React web application?', guidance: 'Discuss memoization, hooks, and local vs global state.' },
+      { id: 2, type: 'SYSTEM DESIGN', question: 'Explain how database indexing improves query lookup times and when indexes should be avoided.', guidance: 'Discuss B-Trees, write overhead, and cardinalities.' },
+      { id: 3, type: 'BEHAVIORAL', question: 'Describe a challenging technical bug you encountered and how you systematically resolved it.', guidance: 'Use the STAR method: Situation, Task, Action, Result.' }
     ];
 
     let feedback = null;
     if (userResponse && userResponse.trim().length > 5) {
       feedback = {
         score: 88,
-        strengths: ['Clear algorithmic explanation', 'Good identification of time complexities'],
-        improvements: ['Include explicit edge case handling for empty inputs', 'Mention memory overhead space complexity']
+        strengths: ['Clear explanation', 'Good identification of key technical concepts'],
+        improvements: ['Include explicit edge case handling', 'Discuss performance complexity trade-offs']
       };
     }
 
     return {
       success: true,
-      companyName: companyName || 'Google',
-      internshipTitle: internshipTitle || 'C++ Systems Software Intern',
+      isFallback: true,
+      companyName: companyName || 'Tech Partner',
+      internshipTitle: internshipTitle || 'Software Engineering Intern',
       questions: defaultQuestions,
       evaluation: feedback
     };
   }
 
-  // 6. AI Project Recommendations
-  async recommendProjects(targetRole = 'Backend Developer', currentSkills = ['C++', 'SQL']) {
+  // 6. Project Recommendations
+  async recommendProjects(targetRole = 'Backend Developer', currentSkills = []) {
     return {
       success: true,
       recommendedProjects: [
         {
-          title: 'DSA-Powered Internship Matching Engine',
-          difficulty: 'ADVANCED',
-          technologies: ['C++17', 'Priority Queue', 'Custom HashMap', 'REST API'],
-          description: 'A native C++ microservice calculating 6-factor candidate match scores and allocating seats using greedy algorithms.',
-          skillsGained: ['C++ Performance Optimization', 'Graph Traversals', 'Max Heap']
+          title: 'Smart Internship Management Portal',
+          difficulty: 'INTERMEDIATE',
+          technologies: ['React', 'Node.js', 'PostgreSQL', 'REST API'],
+          description: 'A full-stack candidate matching portal with dynamic profile completion tracking and AI career coaching.',
+          skillsGained: ['Full-stack REST APIs', 'Database Schema Design', 'AI Integration']
         },
         {
-          title: 'Distributed Log & Activity Monitor',
-          difficulty: 'INTERMEDIATE',
-          technologies: ['Node.js', 'PostgreSQL', 'Redis', 'React'],
-          description: 'Real-time activity logging and dashboard system with automated anomaly detection.',
-          skillsGained: ['Database Indexing', 'Full-stack REST APIs', 'Recharts Visualizations']
+          title: 'Distributed Microservice Activity Monitor',
+          difficulty: 'ADVANCED',
+          technologies: ['Node.js', 'Docker', 'PostgreSQL', 'Redis'],
+          description: 'Real-time activity logging system with automated analytics and responsive dashboard visualizers.',
+          skillsGained: ['Containerization', 'Performance Optimization', 'System Metrics']
         }
       ]
     };
